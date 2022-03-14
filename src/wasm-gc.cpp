@@ -3,31 +3,30 @@
 #include <stdlib.h>
 #include <wasm.h>
 #include <wasmtime.h>
+#include <iostream>
 
 static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_trap_t *trap);
 
 static __attribute__((noinline)) 
-wasm_trap_t* __malloc_callback(
-    void *env,
-    wasmtime_caller_t *caller,
-    const wasmtime_val_t *args,
-    size_t nargs,
-    wasmtime_val_t *results,
-    size_t nresults
-) {
-  printf("__malloc:\n");
-  void *stack_ptr;
-  asm ("movq %%rsp, %0" : "=r"(stack_ptr));
-
-  //Do the garbage collection if necessary
-
-  //Do the allocation
+wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
+                               const wasmtime_val_t *args, size_t nargs,
+                               wasmtime_val_t *results, size_t nresults)
+{
+    printf("bytes requested: %d\n", args->of.i32);
+    void *stack_ptr;
+    asm ("movq %%rsp, %0" : "=r"(stack_ptr));
+    //Do the garbage collection if necessary
+    //collect when memory is low 
+    
+    //size_t memory_size = wasmtime_memory_size(context, &memory);
+    //printf(memory_size);
+    //Do the allocation
   
-  //Return allocated pointer
-  results->kind = WASMTIME_I32;
-  results->of.i32 = 0;
+    //Return allocated pointer
+    results->kind = WASMTIME_I32;
+    results->of.i32 = 0;
   
-  return NULL;
+    return NULL;
 }
 
 int main() {
@@ -143,9 +142,11 @@ int main() {
   wasm_engine_delete(engine);
 
 
-  /**If you want to grow and read memory you can use below functions
+  //If you want to grow and read memory you can use below functions
   // size_t memory_size = wasmtime_memory_size(context, &memory);
-  // size_t data_size = wasmtime_memory_data_size(context, &memory);
+  // printf("%lu",memory_size); //starter: prints zero
+  //size_t data_size = wasmtime_memory_data_size(context, &memory);
+  //printf("%lu",data_size); //1105
   // wasm_memorytype_t* memty;
   // memty = wasmtime_memory_type(context, &memory);
   // size_t max;
@@ -157,27 +158,31 @@ int main() {
   // memory_size = wasmtime_memory_size(context, &memory);
   // data_size = wasmtime_memory_data_size(context, &memory);
 
-  //Read memory in integers
-  // for (int i = 0; i < 40; i+=4) {
-  //   uint32_t j = (wasmtime_memory_data(context, &memory)[i]) | (wasmtime_memory_data(context, &memory)[i+1] << 8) | (wasmtime_memory_data(context, &memory)[i+2] << 16) | ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
-  //   printf("%d\n", j);
-  // }
-  **/
-
+  //Read memory in integers (MJ: this just segfaults and does nothing else)
+  /*
+  for (int i = 0; i < 40; i+=4) {
+      uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
+          (wasmtime_memory_data(context, &memory)[i+1] << 8) |
+          (wasmtime_memory_data(context, &memory)[i+2] << 16) |
+          ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
+      printf("%d\n", j);
+   }
+  */
+  
   return 0;
 }
 
 static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_trap_t *trap) {
-  fprintf(stderr, "error: %s\n", message);
-  wasm_byte_vec_t error_message;
-  if (error != NULL) {
-    wasmtime_error_message(error, &error_message);
-    wasmtime_error_delete(error);
-  } else {
-    wasm_trap_message(trap, &error_message);
-    wasm_trap_delete(trap);
-  }
-  fprintf(stderr, "%.*s\n", (int) error_message.size, error_message.data);
-  wasm_byte_vec_delete(&error_message);
-  exit(1);
+    fprintf(stderr, "error: %s\n", message);
+    wasm_byte_vec_t error_message;
+    if (error != NULL) {
+        wasmtime_error_message(error, &error_message);
+        wasmtime_error_delete(error);
+    } else {
+        wasm_trap_message(trap, &error_message);
+        wasm_trap_delete(trap);
+    }
+    fprintf(stderr, "%.*s\n", (int) error_message.size, error_message.data);
+    wasm_byte_vec_delete(&error_message);
+    exit(1);
 }
