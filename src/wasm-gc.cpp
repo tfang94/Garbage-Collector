@@ -9,30 +9,62 @@ static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_t
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
 
+
+void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_address)
+{
+    for (int i = 0; stack_ptr+i <= base_ptr; i+=interval)
+        if (!as_address)
+            printf("%p --> %d\n", (void*)(stack_ptr+i), *(int*)(stack_ptr+i));
+        else
+            printf("%p --> %p\n", (void*)(stack_ptr+i), *(int*)(stack_ptr+i));
+}
+
 static __attribute__((noinline)) 
 wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
                                const wasmtime_val_t *args, size_t nargs,
                                wasmtime_val_t *results, size_t nresults)
 {
-    int bytes_requested = args->of.i32;
-    //printf("bytes requested: %d\n", bytes_requested);
-
-    void *stack_ptr;
+    void* stack_ptr;
+    void* base_ptr;
     asm ("movq %%rsp, %0" : "=r"(stack_ptr));
+    asm ("movq %%rbp, %0" : "=r"(base_ptr));
+    int* wasm_stack_ptr = (int*)args[2].of.i32;
+    int* wasm_base_ptr = (int*)args[1].of.i32;
+    int bytes_requested = args->of.i32;
+   
+    printf("wasm stack top: %p\n", wasm_stack_ptr);
+    printf("wasm stack base: %p\n", wasm_base_ptr);
+    printf("bytes requested: %d\n", bytes_requested);
+    printf("C stack ptr: %p\n", stack_ptr);
+    printf("C base ptr: %p\n", base_ptr);
+    //print_C_stack(stack_ptr,base_ptr,4,false);
+    //printf("wasm stack top contents: %d\n", *wasm_stack_ptr);
+  
+    
     //Do the garbage collection if necessary
     //collect when memory is low 
     //size_t memory_size = wasmtime_memory_size(context, &memory);
     //printf(memory_size);
     //Do the allocation
 
-    printf("C Stack Top %p Size %d Wasm Stack Base %p Wasm Stack Top %p\n", stack_ptr, args[0].of.i32, args[1].of.i32, args[2].of.i32);
+    /*
+    printf(" C Stack Top %p\n Size %d\n Wasm Stack Base %p\n Wasm Stack Top %p\n",
+           stack_ptr, args[0].of.i32,args[1].of.i32, args[2].of.i32);
+    size_t memory_size = wasmtime_memory_size(context, &memory);
+    printf(" memory size in pages: %lu\n",memory_size);
+    size_t data_size = wasmtime_memory_data_size(context, &memory);
+    printf(" memory size in bytes: %lu\n",data_size);
+    */
 
+    
     
     int offset = 0;
     if (bytes_requested == 16)
         offset = 0;
     else if (bytes_requested == 5)
         offset = 4*(sizeof(int));
+    
+
     
     //Return allocated pointer
     results->kind = WASMTIME_I32;
@@ -160,9 +192,9 @@ int main() {
   // size_t memory_size = wasmtime_memory_size(context, &memory);
   // printf("%lu",memory_size);
 
-  // returns memory size in bytes (returns inconsistent numbers. keeps changing) 
-  // size_t data_size = wasmtime_memory_data_size(context, &memory);
-  // printf("%lu",data_size);
+  // returns memory size in bytes (returns inconsistent numbers when called from here. okay inside malloc callback) 
+  //size_t data_size = wasmtime_memory_data_size(context, &memory);
+  //printf("data size: %lu",data_size);
   
   // wasm_memorytype_t* memty;
   // memty = wasmtime_memory_type(context, &memory);
@@ -172,7 +204,7 @@ int main() {
   // error = wasmtime_memory_grow(context, &memory, max - memory_size, &prev_size);
   // if (error != NULL)
   //   exit_with_error("failed to instantiate module", error, NULL);
-  // guess: this part is to show you the memory grew? 
+  // MJ: guess: this part is to show you the memory grew? 
   // memory_size = wasmtime_memory_size(context, &memory);
   // data_size = wasmtime_memory_data_size(context, &memory);
 
