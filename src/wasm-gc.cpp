@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <wasm.h>
 #include <wasmtime.h>
-#include <iostream>
 
 static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_trap_t *trap);
 
@@ -12,19 +11,29 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
                                const wasmtime_val_t *args, size_t nargs,
                                wasmtime_val_t *results, size_t nresults)
 {
-    printf("bytes requested: %d\n", args->of.i32);
+    int bytes_requested = args->of.i32;
+    //printf("bytes requested: %d\n", bytes_requested);
+
     void *stack_ptr;
     asm ("movq %%rsp, %0" : "=r"(stack_ptr));
     //Do the garbage collection if necessary
     //collect when memory is low 
-    
     //size_t memory_size = wasmtime_memory_size(context, &memory);
     //printf(memory_size);
     //Do the allocation
-  
+
+    printf("C Stack Top %p Size %d Wasm Stack Base %p Wasm Stack Top %p\n", stack_ptr, args[0].of.i32, args[1].of.i32, args[2].of.i32);
+
+    
+    int offset = 0;
+    if (bytes_requested == 16)
+        offset = 0;
+    else if (bytes_requested == 5)
+        offset = 4*(sizeof(int));
+    
     //Return allocated pointer
     results->kind = WASMTIME_I32;
-    results->of.i32 = 0;
+    results->of.i32 = offset;
   
     return NULL;
 }
@@ -129,13 +138,13 @@ int main() {
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
   }
-  
-  //Call _start
+
+  //Call _start //MJ: this is where the wasm program actually runs
   wasmtime_val_t results;
   error = wasmtime_func_call(context, &run.of.func, NULL, 0, NULL, 0, &trap);
   if (error != NULL || trap != NULL)
     exit_with_error("failed to call function", error, trap);
-
+  
   // Clean up
   wasmtime_module_delete(module);
   wasmtime_store_delete(store);
@@ -143,10 +152,14 @@ int main() {
 
 
   //If you want to grow and read memory you can use below functions
+  // returns memory size in wasm pages
   // size_t memory_size = wasmtime_memory_size(context, &memory);
-  // printf("%lu",memory_size); //starter: prints zero
-  //size_t data_size = wasmtime_memory_data_size(context, &memory);
-  //printf("%lu",data_size); //1105
+  // printf("%lu",memory_size);
+
+  // returns memory size in bytes (returns inconsistent numbers. keeps changing) 
+  // size_t data_size = wasmtime_memory_data_size(context, &memory);
+  // printf("%lu",data_size);
+  
   // wasm_memorytype_t* memty;
   // memty = wasmtime_memory_type(context, &memory);
   // size_t max;
@@ -155,6 +168,7 @@ int main() {
   // error = wasmtime_memory_grow(context, &memory, max - memory_size, &prev_size);
   // if (error != NULL)
   //   exit_with_error("failed to instantiate module", error, NULL);
+  // guess: this part is to show you the memory grew? 
   // memory_size = wasmtime_memory_size(context, &memory);
   // data_size = wasmtime_memory_data_size(context, &memory);
 
@@ -167,7 +181,7 @@ int main() {
           ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
       printf("%d\n", j);
    }
-  */
+  */ 
   
   return 0;
 }
