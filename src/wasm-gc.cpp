@@ -19,6 +19,18 @@ void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_addres
             printf("%p --> %p\n", (void*)(stack_ptr+i), *(int*)(stack_ptr+i));
 }
 
+void print_memory()
+{
+    for (int i = 0; i < 40; i+=4) {
+      uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
+          (wasmtime_memory_data(context, &memory)[i+1] << 8) |
+          (wasmtime_memory_data(context, &memory)[i+2] << 16) |
+          ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
+      //if (j != 0)
+          printf("%d\n", j);
+    }
+}
+
 static __attribute__((noinline)) 
 wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
                                const wasmtime_val_t *args, size_t nargs,
@@ -31,12 +43,12 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     int* wasm_stack_ptr = (int*)args[2].of.i32;
     int* wasm_base_ptr = (int*)args[1].of.i32;
     int bytes_requested = args->of.i32;
-   
-    printf("wasm stack top: %p\n", wasm_stack_ptr);
-    printf("wasm stack base: %p\n", wasm_base_ptr);
-    printf("bytes requested: %d\n", bytes_requested);
-    printf("C stack ptr: %p\n", stack_ptr);
-    printf("C base ptr: %p\n", base_ptr);
+    
+    // printf("wasm stack top: %p\n", wasm_stack_ptr);
+    // printf("wasm stack base: %p\n", wasm_base_ptr);
+    // printf("bytes requested: %d\n", bytes_requested);
+    // printf("C stack ptr: %p\n", stack_ptr);
+    // printf("C base ptr: %p\n", base_ptr);
     //print_C_stack(stack_ptr,base_ptr,4,false);
     //printf("wasm stack top contents: %d\n", *wasm_stack_ptr);
   
@@ -56,20 +68,16 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     printf(" memory size in bytes: %lu\n",data_size);
     */
 
-    
-    
     int offset = 0;
     if (bytes_requested == 16)
         offset = 0;
     else if (bytes_requested == 5)
         offset = 4*(sizeof(int));
     
-
-    
     //Return allocated pointer
     results->kind = WASMTIME_I32;
     results->of.i32 = offset;
-  
+    
     return NULL;
 }
 
@@ -172,8 +180,9 @@ int main() {
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
   }
-  
-  printf("144: %p\n", wasmtime_memory_data(context, &memory));
+
+  //what is this for?
+  //printf("144: %p\n", wasmtime_memory_data(context, &memory));
 
   //Call _start
   wasmtime_val_t results;
@@ -181,10 +190,6 @@ int main() {
   if (error != NULL || trap != NULL)
     exit_with_error("failed to call function", error, trap);
   
-  // Clean up
-  wasmtime_module_delete(module);
-  wasmtime_store_delete(store);
-  wasm_engine_delete(engine);
 
 
   //If you want to grow and read memory you can use below functions
@@ -208,17 +213,21 @@ int main() {
   // memory_size = wasmtime_memory_size(context, &memory);
   // data_size = wasmtime_memory_data_size(context, &memory);
 
-  //Read memory in integers (MJ: this just segfaults and does nothing else)
-  /*
-  for (int i = 0; i < 40; i+=4) {
-      uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
-          (wasmtime_memory_data(context, &memory)[i+1] << 8) |
-          (wasmtime_memory_data(context, &memory)[i+2] << 16) |
-          ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
-      printf("%d\n", j);
-   }
-  */ 
-  
+  //read memory in integers (copied into "print memory")
+  // for (int i = 0; i < 40; i+=4) {
+  //     uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
+  //         (wasmtime_memory_data(context, &memory)[i+1] << 8) |
+  //         (wasmtime_memory_data(context, &memory)[i+2] << 16) |
+  //         ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
+  //     printf("%d\n", j);
+  //  }
+
+  //-- end --
+  //make sure you do this last!  
+  // Clean up
+  wasmtime_module_delete(module);
+  wasmtime_store_delete(store);
+  wasm_engine_delete(engine);
   return 0;
 }
 

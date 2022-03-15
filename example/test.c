@@ -16,12 +16,12 @@ int main()
 	}
 	
 	//printf("array: %p %d\n", array, array[10]);
-    printf("wasm stack top from user: %p\n", stack_top);    
-    printf("wasm stack base from user: %p\n", stack_base);    
-    /*
+    //printf("wasm stack top from user: %p\n", stack_top);    
+    //printf("wasm stack base from user: %p\n", stack_base);    
+    
 	for (int i = 0; i < 10; i++) {
-        printf("array:%p %d\n", char_array+i, char_array[i]);
+        printf("array:%p %d\n", array+i, array[i]);
 	}
-    */
+    
 	return 0;
 }
