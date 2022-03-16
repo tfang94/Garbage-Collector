@@ -8,6 +8,14 @@ static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_t
 
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
+int memory_bumper_offset = 0;
+
+struct basic_chunk {
+    int data;
+    int mark;
+    int size;
+    int padding;
+};
 
 
 void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_address)
@@ -19,23 +27,27 @@ void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_addres
             printf("%p --> %p\n", (void*)(stack_ptr+i), *(int*)(stack_ptr+i));
 }
 
+
 void print_memory(int start, int end, int step)
 {
-    //MJ: both of these blocks do the same thing. I don't understand the bit shifty one
-    //correction: the shorter one prints what I belive to be the correct addresses.
-    /*
-    for (int i = 0; i < 40; i+=4) {
-        uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
-              (wasmtime_memory_data(context, &memory)[i+1] << 8) |
-             (wasmtime_memory_data(context, &memory)[i+2] << 16) |
-             ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
-        printf("%p --> %d\n", &j, j);
-    }
-    */
     printf("print memory\n");
     uint8_t* mem = wasmtime_memory_data(context, &memory);
-    for (int i = start; i < end; i+=step)
-        printf("%p -> %d\n", mem+i, *(mem+i));
+    for (int i = start; i < end; i+=step) {
+        uint32_t data = (mem[i]|(mem[i+1])<<8|(mem[i+2])<<16|(mem[i+3])<<24);
+        printf("%p -> %d\n",mem+i,data);
+    }
+}
+
+
+int basic_alloc(int bytes_requested)
+{
+    int offset = memory_bumper_offset;
+    uint8_t* mem = wasmtime_memory_data(context, &memory) + memory_bumper_offset;
+    basic_chunk* bc = (basic_chunk*)mem;
+    bc->mark=0;
+    bc->size=sizeof(int);
+    memory_bumper_offset += sizeof(basic_chunk);
+    return offset;
 }
 
 static __attribute__((noinline)) 
@@ -74,11 +86,8 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     size_t data_size = wasmtime_memory_data_size(context, &memory);
     printf(" memory size in bytes: %lu\n",data_size);
     */
-    int offset = 0;
-    if (bytes_requested == 6*sizeof(int))
-        offset = 0;
-    else if (bytes_requested == 4*sizeof(int))
-        offset = 6*(sizeof(int));
+
+    int offset = basic_alloc(bytes_requested);
     
     //Return allocated pointer
     results->kind = WASMTIME_I32;
@@ -199,7 +208,7 @@ int main() {
     exit_with_error("failed to call function", error, trap);
 
   
-  //print_memory(0,40,4);
+  print_memory(0,40,4);
 
   //If you want to grow and read memory you can use below functions
   // returns memory size in wasm pages
