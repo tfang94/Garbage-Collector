@@ -12,6 +12,7 @@ wasmtime_context_t *context;
 int memory_bumper_offset = 0; //integer offset for end of allocated memory
 
 struct Chunk {
+    
     uint8_t* address;
     int offset;
     int mark = 0;
