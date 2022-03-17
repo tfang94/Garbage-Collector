@@ -58,25 +58,11 @@ void print_memory(int start, int end, int step)
 
 int basic_alloc(int bytes_requested)
 {
-
-    //todo: check free list
-    //  if a big enough free block is found, use that
-    //no good free block: check if there is enough memory to allocate
-    //  if so, allocate
-    //  otherwise, try to collect garbage
-    //    then check the free list again
-    //      if there still isn't enough memory, throw an oom error and crash 
-
-    
     //get end of alloc memory and save its address
     int offset = memory_bumper_offset;
     uint8_t* mem = wasmtime_memory_data(context, &memory) +
         memory_bumper_offset;
     
-    //check if we are near the end of memory (true when mem is near end of memory)
-    //set a flag if we are
-    bool oom_flag = false;
-
     //calculate chunk size and class index (for free list)
     int memsize = 4;
     int memclass_index = 0;
@@ -86,30 +72,34 @@ int basic_alloc(int bytes_requested)
             memclass_index += 1; //memory class
     }
 
+    // check for remaining memory
+    size_t memory_length = wasmtime_memory_data_size(context, &memory);
+    int memory_remaining = memory_length - offset;
+    bool oom_flag = (memory_remaining >= memsize) ? false : true;
+    
     Chunk* chunk;
 
-    //check free list
+    // TODO: add a case that triggers collection when memory is low
+    // check free list
     if (!free_list->free_chunks[memclass_index].empty()) {
         chunk = free_list->free_chunks[memclass_index].front();
         free_list->free_chunks[memclass_index].pop_front();
         used_list.push_front(chunk);
         return chunk->offset;
+    // make a new chunk of memory and give it data
+    } else if (oom_flag == false) { 
+        chunk = new Chunk();
+        chunk->address=mem;
+        chunk->offset = offset;
+        chunk->size = memsize;
+        chunk->memclass_index = memclass_index;
+        used_list.push_front(chunk);
+        memory_bumper_offset += chunk->size; //bump the end of alloc memory forward
+        return chunk->offset;    
+    } else {
+        printf("error: out of memory\n");
+        return NULL;
     }
-    
-    
-    
-    //make a new chunk of memory and give it data
-    chunk = new Chunk();
-    chunk->address=mem;
-    chunk->offset = offset;
-    chunk->size = memsize;
-    chunk->memclass_index = memclass_index;
-    //while (chunk->size < bytes_requested) //allocations in powers of 2
-    //    chunk->size *= 2;
-
-    used_list.push_front(chunk);
-    memory_bumper_offset += chunk->size; //bump the end of alloc memory forward
-    return offset;
 }
 
 static __attribute__((noinline)) 
