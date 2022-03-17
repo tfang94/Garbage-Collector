@@ -4,17 +4,18 @@
 #include <wasm.h>
 #include <wasmtime.h>
 
-static void exit_with_error(const char *message, wasmtime_error_t *error, wasm_trap_t *trap);
+static void exit_with_error(const char *message,
+                            wasmtime_error_t *error, wasm_trap_t *trap);
 
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
-int memory_bumper_offset = 0;
+int memory_bumper_offset = 0; //integer offset for end of allocated memory
 
-struct basic_chunk {
-    int data;
-    int mark;
-    int size;
-    int padding;
+struct Chunk {
+    uint8_t* address;
+    int offset;
+    int mark = 0;
+    int size = 4;
 };
 
 
@@ -30,7 +31,7 @@ void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_addres
 
 void print_memory(int start, int end, int step)
 {
-    printf("print memory\n");
+    printf("wasm memory (GC):\n");
     uint8_t* mem = wasmtime_memory_data(context, &memory);
     for (int i = start; i < end; i+=step) {
         uint32_t data = (mem[i]|(mem[i+1])<<8|(mem[i+2])<<16|(mem[i+3])<<24);
@@ -41,12 +42,20 @@ void print_memory(int start, int end, int step)
 
 int basic_alloc(int bytes_requested)
 {
+    //get end of alloc memory and save its address
     int offset = memory_bumper_offset;
-    uint8_t* mem = wasmtime_memory_data(context, &memory) + memory_bumper_offset;
-    basic_chunk* bc = (basic_chunk*)mem;
-    bc->mark=0;
-    bc->size=sizeof(int);
-    memory_bumper_offset += sizeof(basic_chunk);
+    uint8_t* mem = wasmtime_memory_data(context, &memory) +
+        memory_bumper_offset;
+
+    //make a new chunk of memory
+    Chunk* chunk = new Chunk();
+    chunk->address=mem;
+    chunk->offset = offset;
+    //allocations in powers of 2
+    while (chunk->size < bytes_requested)
+        chunk->size *= 2;
+    //bump the end of alloc memory forward
+    memory_bumper_offset += chunk->size;
     return offset;
 }
 
