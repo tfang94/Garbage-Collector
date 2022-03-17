@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <wasm.h>
 #include <wasmtime.h>
+//cpp
+#include <iostream>
+#include <list>
 
 static void exit_with_error(const char *message,
                             wasmtime_error_t *error, wasm_trap_t *trap);
@@ -12,13 +15,25 @@ wasmtime_context_t *context;
 int memory_bumper_offset = 0; //integer offset for end of allocated memory
 
 struct Chunk {
-    
     uint8_t* address;
     int offset;
     int mark = 0;
     int size = 4;
+    int memclass_index;
 };
+std::list<Chunk*> used_list; //store used chunks
 
+enum memory_class
+{
+  B4,B8,B16,B32,
+  B64,B128,B256,B512,
+  B1024,B2048,B4096,BIG
+};
+struct FreeList
+{
+  std::list<Chunk*> free_chunks[12];
+};
+FreeList* free_list = new FreeList();
 
 void print_C_stack(void* stack_ptr, void* base_ptr, int interval, bool as_address)
 {
@@ -43,20 +58,57 @@ void print_memory(int start, int end, int step)
 
 int basic_alloc(int bytes_requested)
 {
+
+    //todo: check free list
+    //  if a big enough free block is found, use that
+    //no good free block: check if there is enough memory to allocate
+    //  if so, allocate
+    //  otherwise, try to collect garbage
+    //    then check the free list again
+    //      if there still isn't enough memory, throw an oom error and crash 
+
+    
     //get end of alloc memory and save its address
     int offset = memory_bumper_offset;
     uint8_t* mem = wasmtime_memory_data(context, &memory) +
         memory_bumper_offset;
+    
+    //check if we are near the end of memory (true when mem is near end of memory)
+    //set a flag if we are
+    bool oom_flag = false;
 
-    //make a new chunk of memory
-    Chunk* chunk = new Chunk();
+    //calculate chunk size and class index (for free list)
+    int memsize = 4;
+    int memclass_index = 0;
+    while (memsize < bytes_requested) {
+        memsize *= 2; //allocations in powers of 2
+        if (memclass_index < BIG)
+            memclass_index += 1; //memory class
+    }
+
+    Chunk* chunk;
+
+    //check free list
+    if (!free_list->free_chunks[memclass_index].empty()) {
+        chunk = free_list->free_chunks[memclass_index].front();
+        free_list->free_chunks[memclass_index].pop_front();
+        used_list.push_front(chunk);
+        return chunk->offset;
+    }
+    
+    
+    
+    //make a new chunk of memory and give it data
+    chunk = new Chunk();
     chunk->address=mem;
     chunk->offset = offset;
-    //allocations in powers of 2
-    while (chunk->size < bytes_requested)
-        chunk->size *= 2;
-    //bump the end of alloc memory forward
-    memory_bumper_offset += chunk->size;
+    chunk->size = memsize;
+    chunk->memclass_index = memclass_index;
+    //while (chunk->size < bytes_requested) //allocations in powers of 2
+    //    chunk->size *= 2;
+
+    used_list.push_front(chunk);
+    memory_bumper_offset += chunk->size; //bump the end of alloc memory forward
     return offset;
 }
 
@@ -219,7 +271,6 @@ int main() {
 
   
   print_memory(0,40,4);
-
   //If you want to grow and read memory you can use below functions
   // returns memory size in wasm pages
   // size_t memory_size = wasmtime_memory_size(context, &memory);
