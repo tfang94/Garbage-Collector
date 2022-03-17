@@ -76,6 +76,9 @@ int basic_alloc(int bytes_requested)
     size_t memory_length = wasmtime_memory_data_size(context, &memory);
     int memory_remaining = memory_length - offset;
     bool oom_flag = (memory_remaining >= memsize) ? false : true;
+
+    if (oom_flag == true)
+        //try to collect memory
     
     Chunk* chunk;
 
