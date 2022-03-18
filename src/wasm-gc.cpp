@@ -77,8 +77,9 @@ int basic_alloc(int bytes_requested)
     int memory_remaining = memory_length - offset;
     bool oom_flag = (memory_remaining >= memsize) ? false : true;
 
-    if (oom_flag == true)
+    if (oom_flag == true){
         //try to collect memory
+    }
     
     Chunk* chunk;
 
