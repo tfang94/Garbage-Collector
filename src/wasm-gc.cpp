@@ -55,8 +55,38 @@ void print_memory(int start, int end, int step)
     }
 }
 
+//functions to impliment stubs
+//reutnr number of bytes allocaed in the wasm memory
+size_t getBytesAllocated()
+{
+    printf("stub\n");
+}
+//return size of wasm memory
+size_t wasmMemorySize()
+{
+    printf("stub\n");
+}
+//return number of bytes allocated in size class
+size_t bytesAllocatedInSizeClass()
+{
+    printf("stub\n");
+}
 
-int __alloc(int bytes_requested)
+/*--GC functions--*/
+
+//scan memory and mark accessable chunks
+void __mark_memory()
+{
+    printf("stub\n");
+}
+
+//collect unmarked memory and move it to the appropriate free list (aka sweep)
+void __collect_memory()
+{
+    printf("stub\n");
+}
+
+int __allocate_memory(int bytes_requested)
 {
     //get end of alloc memory and save its address
     int offset = memory_bumper_offset;
@@ -83,8 +113,8 @@ int __alloc(int bytes_requested)
     
     Chunk* chunk;
 
-    // TODO: add a case that triggers collection when memory is low
     // check free list
+    //TODO: make sure "big" memory from freelist is big enough  
     if (!free_list->free_chunks[memclass_index].empty()) {
         chunk = free_list->free_chunks[memclass_index].front();
         free_list->free_chunks[memclass_index].pop_front();
@@ -118,37 +148,11 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     int* wasm_stack_ptr = (int*)args[2].of.i32;
     int* wasm_base_ptr = (int*)args[1].of.i32;
     int bytes_requested = args->of.i32;
-    // printf("wasm stack top: %p\n", wasm_stack_ptr);
-    // printf("wasm stack base: %p\n", wasm_base_ptr);
-    // printf("bytes requested: %d\n", bytes_requested);
-    // printf("C stack ptr: %p\n", stack_ptr);
-    // printf("C base ptr: %p\n", base_ptr);
-    //print_C_stack(stack_ptr,base_ptr,4,false);
-    //printf("wasm stack top contents: %d\n", *wasm_stack_ptr);
-  
-    
-    //Do the garbage collection if necessary
-    //collect when memory is low 
-    //size_t memory_size = wasmtime_memory_size(context, &memory);
-    //printf(memory_size);
-    //Do the allocation
 
-    /*
-    printf(" C Stack Top %p\n Size %d\n Wasm Stack Base %p\n Wasm Stack Top %p\n",
-           stack_ptr, args[0].of.i32,args[1].of.i32, args[2].of.i32);
-    size_t memory_size = wasmtime_memory_size(context, &memory);
-    printf(" memory size in pages: %lu\n",memory_size);
-    size_t data_size = wasmtime_memory_data_size(context, &memory);
-    printf(" memory size in bytes: %lu\n",data_size);
-    */
+    int offset = __allocate_memory(bytes_requested);
 
-    int offset = __alloc(bytes_requested);
-    
-    //Return allocated pointer
-    results->kind = WASMTIME_I32;
-    //results->of.i32 = offset;
-    results->of.i32 = offset;
-    //print_memory(0,40,4);
+    results->kind = WASMTIME_I32; 
+    results->of.i32 = offset; //return alloc pointer as int 
     
     return NULL;
 }
