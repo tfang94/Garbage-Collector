@@ -17,7 +17,7 @@ int memory_bumper_offset = 0; //integer offset for end of allocated memory
 struct Chunk {
     uint8_t* address;
     int offset;
-    int mark = 0;
+    bool mark = false;
     int size = 4;
     int memclass_index;
 };
@@ -83,7 +83,13 @@ void __mark_memory()
 //collect unmarked memory and move it to the appropriate free list (aka sweep)
 void __collect_memory()
 {
-    printf("stub\n");
+    used_list.remove_if([](Chunk* c) {
+            flag=c->mark;
+            c->mark=false;
+            if (flag==false) {
+                free_list->free_chunks[c->memclass_index].push_front();
+            }
+            return flag==false;});
 }
 
 int __allocate_memory(int bytes_requested)
@@ -108,7 +114,8 @@ int __allocate_memory(int bytes_requested)
     bool oom_flag = (memory_remaining >= memsize) ? false : true;
 
     if (oom_flag == true){
-        //try to collect memory
+        __mark_memory();
+        __collect_memory();
     }
     
     Chunk* chunk;
@@ -148,12 +155,9 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     int* wasm_stack_ptr = (int*)args[2].of.i32;
     int* wasm_base_ptr = (int*)args[1].of.i32;
     int bytes_requested = args->of.i32;
-
     int offset = __allocate_memory(bytes_requested);
-
     results->kind = WASMTIME_I32; 
     results->of.i32 = offset; //return alloc pointer as int 
-    
     return NULL;
 }
 
