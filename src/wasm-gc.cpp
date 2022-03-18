@@ -84,10 +84,10 @@ void __mark_memory()
 void __collect_memory()
 {
     used_list.remove_if([](Chunk* c) {
-            flag=c->mark;
+            bool flag=c->mark;
             c->mark=false;
             if (flag==false) {
-                free_list->free_chunks[c->memclass_index].push_front();
+                free_list->free_chunks[c->memclass_index].push_front(c);
             }
             return flag==false;});
 }
