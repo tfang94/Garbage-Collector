@@ -56,7 +56,7 @@ void print_memory(int start, int end, int step)
 }
 
 
-int basic_alloc(int bytes_requested)
+int __alloc(int bytes_requested)
 {
     //get end of alloc memory and save its address
     int offset = memory_bumper_offset;
@@ -102,7 +102,7 @@ int basic_alloc(int bytes_requested)
         return chunk->offset;    
     } else {
         printf("error: out of memory\n");
-        return NULL;
+        exit(-1);
     }
 }
 
@@ -118,7 +118,6 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     int* wasm_stack_ptr = (int*)args[2].of.i32;
     int* wasm_base_ptr = (int*)args[1].of.i32;
     int bytes_requested = args->of.i32;
-    
     // printf("wasm stack top: %p\n", wasm_stack_ptr);
     // printf("wasm stack base: %p\n", wasm_base_ptr);
     // printf("bytes requested: %d\n", bytes_requested);
@@ -143,12 +142,12 @@ wasm_trap_t* __malloc_callback(void *env, wasmtime_caller_t *caller,
     printf(" memory size in bytes: %lu\n",data_size);
     */
 
-    int offset = basic_alloc(bytes_requested);
+    int offset = __alloc(bytes_requested);
     
     //Return allocated pointer
     results->kind = WASMTIME_I32;
+    //results->of.i32 = offset;
     results->of.i32 = offset;
-
     //print_memory(0,40,4);
     
     return NULL;
