@@ -6,6 +6,8 @@
 // cpp
 #include <iostream>
 #include <list>
+#include <unordered_map>
+#include <set>
 
 static void exit_with_error(const char *message,
                             wasmtime_error_t *error, wasm_trap_t *trap);
@@ -52,9 +54,9 @@ void print_C_stack(void *stack_ptr, void *base_ptr, int interval, bool as_addres
   {
     if (!as_address)
     {
-      printf("%d. %p --> %d\n", cnt, (void *)(stack_ptr + i), *(int *)(stack_ptr + i));
-      if (*(int *)(stack_ptr + i) == 27)
-        printf("------------Match-------------------------"); // Try to find a=27 from test.c
+      printf("%d. %p --> %d\n", cnt, (void *)(stack_ptr + i), *(uint8_t *)(stack_ptr + i));
+      if (*(uint8_t *)(stack_ptr + i) == 27)
+        printf("------------Match-------------------------\n"); // Try to find a=27 from test.c
     }
     else
       printf("%d. %p --> %p\n", cnt, (void *)(stack_ptr + i), *(int *)(stack_ptr + i));
@@ -144,9 +146,59 @@ size_t bytesAllocatedInSizeClass()
 /*--GC functions--*/
 
 // scan memory and mark accessable chunks
+
+// std::unordered_map<int *, int> used_map; // TF: for debugging
+void __mark_C_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_set)
+{
+  for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(uint8_t *)) // Scan through C stack
+  {
+    try
+    {
+      // If what appears to be pointer to used_list found on C stack, mark that chunk
+      if (used_set.count(*(uint8_t **)(stack_ptr + i)) > 0)
+      {
+        for (Chunk *c : used_list)
+        {
+          if (c->address == *(uint8_t **)(stack_ptr + i))
+          {
+            c->mark = 1;
+            break;
+          }
+        }
+      }
+    }
+    catch (const std::exception &e)
+    {
+      std::cout << e.what() << "\n";
+    }
+  }
+  // for debugging purposes: finds pointers to ints put on stack in __malloc_callback()
+  // printf("Scanning C stack:\n");
+  // for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(void *))
+  // {
+  //   printf("address: %p -> %p\n", (stack_ptr + i), *(int **)(stack_ptr + i));
+  //   try
+  //   {
+  //     if (used_map.count(*(int **)(stack_ptr + i)) > 0)
+  //     {
+  //       printf("matched int : %d\n", used_map.at(*(int **)(stack_ptr + i)));
+  //     }
+  //   }
+  //   catch (const std::exception &e)
+  //   {
+  //     std::cout << e.what() << "\n";
+  //   }
+  // }
+}
+
 void __mark_memory()
 {
   printf("stub\n");
+  std::set<uint8_t *> used_set; // For efficient lookup of addresses when scanning memory
+  for (Chunk *c : used_list)
+  {
+    used_set.insert(c->address);
+  }
 }
 
 // collect unmarked memory and move it to the appropriate free list (aka sweep)
@@ -234,12 +286,25 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
       : "=r"(base_ptr));
   int *wasm_stack_ptr = (int *)args[2].of.i32;
   int *wasm_base_ptr = (int *)args[1].of.i32;
+
   // print_C_stack(stack_ptr, base_ptr, 1, false);
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
-  return NULL;
+
+  // // TF: for debugging
+  // int a = 27;
+  // int b = 29;
+  // int c = 31;
+  // int *a_ptr = &a;
+  // int *b_ptr = &b;
+  // int *c_ptr = &c;
+  // used_map[a_ptr] = a;
+  // used_map[b_ptr] = b;
+  // used_map[c_ptr] = c;
+  // __mark_C_stack(stack_ptr, base_ptr);
+  // return NULL;
 }
 
 int main()
@@ -355,7 +420,7 @@ int main()
 
   print_memory(0, 40, 4);
 
-  print_registers(); // trying to see if I can find a=27 from test.c in registers
+  // print_registers();
 
   // If you want to grow and read memory you can use below functions
   //  returns memory size in wasm pages
