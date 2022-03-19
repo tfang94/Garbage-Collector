@@ -73,6 +73,57 @@ void print_memory(int start, int end, int step)
   }
 }
 
+void print_registers()
+{
+  void *rsp_ptr;
+  void *rbp_ptr;
+  void *rax_ptr;
+  void *rcx_ptr;
+  void *rdx_ptr;
+  void *rbx_ptr;
+  // void *r6_ptr; //Doesn't exist
+  void *r8_ptr;
+  void *r9_ptr;
+  void *r14_ptr;
+  void *r15_ptr;
+
+  // For some reason asm doesn't let you input string so copied register pointers manually
+  asm("movq %%rsp, %0"
+      : "=r"(rsp_ptr));
+  asm("movq %%rbp, %0"
+      : "=r"(rbp_ptr));
+  asm("movq %%rax, %0"
+      : "=r"(rax_ptr));
+  asm("movq %%rcx, %0"
+      : "=r"(rcx_ptr));
+  asm("movq %%rdx, %0"
+      : "=r"(rdx_ptr));
+  asm("movq %%rbx, %0"
+      : "=r"(rbx_ptr));
+  // asm("movq %%r6, %0"
+  //     : "=r"(r6_ptr));
+  asm("movq %%r8, %0"
+      : "=r"(r8_ptr));
+  asm("movq %%r9, %0"
+      : "=r"(r9_ptr));
+  asm("movq %%r14, %0"
+      : "=r"(r14_ptr));
+  asm("movq %%r15, %0"
+      : "=r"(r15_ptr));
+
+  printf("rsp: %p -> %d\n", rsp_ptr, *(uint8_t *)rsp_ptr);
+  printf("rbp: %p -> %d\n", rbp_ptr, *(uint8_t *)rsp_ptr);
+  printf("rax: %p -> %d\n", rbp_ptr, *(uint8_t *)rax_ptr);
+  // printf("rcx: %p -> %d\n", rcx_ptr, *(uint8_t *)rcx_ptr); // Seg fault
+  // printf("rdx: %p -> %d\n", rdx_ptr, *(uint8_t *)rdx_ptr); // Seg fault
+  printf("rbx: %p -> %d\n", rbx_ptr, *(uint8_t *)rbx_ptr);
+  // printf("r6: %p -> %d\n", r6_ptr, *(uint8_t *)r6_ptr);
+  // printf("r8: %p -> %d\n", r8_ptr, *(uint8_t *)r8_ptr); //Seg fault
+  // printf("r9: %p -> %d\n", r9_ptr, *(uint8_t *)r9_ptr);
+  // printf("r14: %p -> %d\n", r14_ptr, *(uint8_t *)r14_ptr);
+  // printf("r15: %p -> %d\n", r15_ptr, *(uint8_t *)r15_ptr); //Seg fault
+}
+
 // functions to impliment stubs
 // reutnr number of bytes allocaed in the wasm memory
 size_t getBytesAllocated()
@@ -183,7 +234,7 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
       : "=r"(base_ptr));
   int *wasm_stack_ptr = (int *)args[2].of.i32;
   int *wasm_base_ptr = (int *)args[1].of.i32;
-  print_C_stack(stack_ptr, base_ptr, 1, false);
+  // print_C_stack(stack_ptr, base_ptr, 1, false);
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
@@ -303,6 +354,8 @@ int main()
     exit_with_error("failed to call function", error, trap);
 
   print_memory(0, 40, 4);
+
+  print_registers(); // trying to see if I can find a=27 from test.c in registers
 
   // If you want to grow and read memory you can use below functions
   //  returns memory size in wasm pages
