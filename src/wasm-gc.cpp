@@ -55,11 +55,9 @@ void print_C_stack(void *stack_ptr, void *base_ptr, int interval, bool as_addres
     if (!as_address)
     {
       printf("%d. %p --> %d\n", cnt, (void *)(stack_ptr + i), *(uint8_t *)(stack_ptr + i));
-      if (*(uint8_t *)(stack_ptr + i) == 27)
-        printf("------------Match-------------------------\n"); // Try to find a=27 from test.c
     }
     else
-      printf("%d. %p --> %p\n", cnt, (void *)(stack_ptr + i), *(int *)(stack_ptr + i));
+      printf("%d. %p --> %p\n", cnt, (void *)(stack_ptr + i), *(uint8_t *)(stack_ptr + i));
     ++cnt;
   }
 }
@@ -292,6 +290,7 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
+  return NULL;
 
   // // TF: for debugging
   // int a = 27;
@@ -304,7 +303,6 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
   // used_map[b_ptr] = b;
   // used_map[c_ptr] = c;
   // __mark_C_stack(stack_ptr, base_ptr);
-  // return NULL;
 }
 
 int main()
