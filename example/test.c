@@ -12,6 +12,13 @@ int *array2;
 
 int main()
 {
+    int s = 33;
+    int r = 22;
+    int q = 11;
+    int w = 99;
+    int z = 420;
+    int y = 69;
+    int x = 42;
     int a = 27;
     void *stack_base;
     stack_base = &a;

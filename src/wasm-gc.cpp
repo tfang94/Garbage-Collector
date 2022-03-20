@@ -15,6 +15,7 @@ static void exit_with_error(const char *message,
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
 int memory_bumper_offset = 0; // integer offset for end of allocated memory
+int heap_offset = 0; //start of heap (init in first __malloc call for both of these )
 long __heap_base;
 long __data_end;
 
@@ -67,11 +68,11 @@ void print_stack(void *stack_ptr, void *base_ptr, int interval, bool as_address)
 void print_memory(int start, int end, int step)
 {
   printf("wasm memory (GC):\n");
-  uint8_t *mem = wasmtime_memory_data(context, &memory);
+  uint8_t *mem = wasmtime_memory_data(context, &memory)+heap_offset;
   for (int i = start; i < end; i += step)
   {
     uint32_t data = (mem[i] | (mem[i + 1]) << 8 | (mem[i + 2]) << 16 | (mem[i + 3]) << 24);
-    printf("%p -> %d\n", mem + i, data);
+    printf("%p -> %d\n", mem+i, data);
   }
 }
 
@@ -129,7 +130,7 @@ void print_registers()
 // return size of wasm memory
 size_t wasmMemorySize()
 {
-    return (size_t)memory_bumper_offset;
+    return (size_t)memory_bumper_offset - 66576;
 }
 // return number of bytes allocated in size class
 size_t bytesAllocatedInSizeClass(int szClass)
@@ -318,13 +319,21 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
       : "=r"(stack_ptr));
   asm("movq %%rbp, %0"
       : "=r"(base_ptr));
-  wasm_stack_ptr = (int *)args[2].of.i32;
-  wasm_base_ptr = (int *)args[1].of.i32;
+  wasm_stack_ptr = (int*)args[2].of.i32;
+  wasm_base_ptr = (int*)args[1].of.i32;
+  //init offset
+  if (heap_offset == 0) heap_offset += 66576; //stack/heap base
+  if (memory_bumper_offset == 0) memory_bumper_offset += heap_offset;
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
 
+
+  //for (int i = 0;i<=10;i++){
+  //    printf("%p -> %d\n", wasmstackbase, *wasmstackbase);
+  //}
+  
   // // TF: for debugging (scanning memory offset with __heap_base)
   // long stack_sz = (long)wasm_base_ptr - (long)wasm_stack_ptr;
   // printf("stack size: %ld\n", stack_sz);
@@ -474,7 +483,7 @@ int main()
 
   // print_memory(0, 40, 4);
 
-  print_memory(0, 40, 4);
+  print_memory(-40, 40, 4);
   // print_registers();
 
   // If you want to grow and read memory you can use below functions
