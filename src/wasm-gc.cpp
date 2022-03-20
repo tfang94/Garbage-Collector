@@ -124,21 +124,41 @@ void print_registers()
   // printf("r15: %p -> %d\n", r15_ptr, *(uint8_t *)r15_ptr); //Seg fault
 }
 
-// functions to impliment stubs
-// reutnr number of bytes allocaed in the wasm memory
-size_t getBytesAllocated()
-{
-  printf("stub\n");
-}
 // return size of wasm memory
 size_t wasmMemorySize()
 {
-  printf("stub\n");
+    return (size_t)memory_bumper_offset;
 }
 // return number of bytes allocated in size class
-size_t bytesAllocatedInSizeClass()
+size_t bytesAllocatedInSizeClass(int szClass)
 {
-  printf("stub\n");
+    int classes[11] = {4,8,16,32,64,128,256,512,1024,2048,4096};
+    int mc = -1;
+    if (szClass > 4096)
+        mc = BIG;
+    for(int i = 10;i-->0;){
+        if (szClass == classes[i]){
+            mc = i;
+            break;
+        }
+    }
+    if (mc == -1) return 0;
+    int count = 0;
+    for (Chunk* c : used_list){
+        if (c->memclass_index == mc)
+            count += c->size;
+    }
+    return count;
+}
+
+// return number of bytes allocaed in the wasm memory
+size_t getBytesAllocated()
+{
+    int classes[12] = {4,8,16,32,64,128,256,512,1024,2048,4096,4097};
+    int count = 0;
+    for (int i : classes)
+        count += bytesAllocatedInSizeClass(i);
+    return count;
 }
 
 /*--GC functions--*/
@@ -438,7 +458,6 @@ int main()
     exit_with_error("failed to call function", error, trap);
 
   print_memory(0, 40, 4);
-
   // print_registers();
 
   // If you want to grow and read memory you can use below functions
