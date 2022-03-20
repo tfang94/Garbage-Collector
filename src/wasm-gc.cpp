@@ -15,6 +15,8 @@ static void exit_with_error(const char *message,
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
 int memory_bumper_offset = 0; // integer offset for end of allocated memory
+long __heap_base;
+long __data_end;
 
 struct Chunk
 {
@@ -47,7 +49,7 @@ struct FreeList
 };
 FreeList *free_list = new FreeList();
 
-void print_C_stack(void *stack_ptr, void *base_ptr, int interval, bool as_address)
+void print_stack(void *stack_ptr, void *base_ptr, int interval, bool as_address)
 {
   int cnt = 1;
   for (int i = 0; stack_ptr + i <= base_ptr; i += interval)
@@ -290,17 +292,22 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
       : "=r"(base_ptr));
   wasm_stack_ptr = (int *)args[2].of.i32;
   wasm_base_ptr = (int *)args[1].of.i32;
-
-  // print_C_stack(stack_ptr, base_ptr, 1, false);
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
-  // printf("wasm stack ptr: %p\n", wasm_stack_ptr);
-  // printf("wasm base pointer: %p\n", wasm_base_ptr);
-  return NULL;
 
-  // // TF: for debugging
+  // // TF: for debugging (scanning memory offset with __heap_base)
+  // long stack_sz = (long)wasm_base_ptr - (long)wasm_stack_ptr;
+  // printf("stack size: %ld\n", stack_sz);
+  // uint8_t *memstart = wasmtime_memory_data(context, &memory);
+  // uint8_t *mem_heap_base = (memstart + __heap_base - stack_sz);
+  // for (int i = 0; i < stack_sz; i++)
+  // {
+  //   printf("addr: %p -> %d\n", mem_heap_base + i, *(mem_heap_base + i));
+  // }
+
+  // // TF: for debugging (for testing and printing C stack)
   // int a = 27;
   // int b = 29;
   // int c = 31;
@@ -311,6 +318,7 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
   // used_map[b_ptr] = b;
   // used_map[c_ptr] = c;
   // __mark_C_stack(stack_ptr, base_ptr);
+  return NULL;
 }
 
 int main()
@@ -413,15 +421,22 @@ int main()
     wasmtime_global_t global = item.of.global;
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
-    std::cout << exportname->data << "\n";
-    printf("export as int: %d\n", exportWasm);
-    printf("export as addr: %p\n", exportWasm);
-    printf("export as dereferrenced ptr: %d\n", *(int *)exportWasm);
-    printf("global value: %d\n", globalval.of.i32);
-  }
+    std::cout << "exportname: " << exportname->data << "\n";
 
+    if (strcmp(exportname->data, "__heap_base") == 0)
+    {
+      __heap_base = globalval.of.i64;
+      printf("heapbase: %ld\n", __heap_base);
+    }
+    if (strcmp(exportname->data, "__data_end") == 0)
+    {
+      __data_end = globalval.of.i64;
+      printf("__data_end: %ld\n", __data_end);
+    }
+  }
   // what is this for?
   // printf("144: %p\n", wasmtime_memory_data(context, &memory));
+  // uint8_t *hp_bs = (uint8_t *)70288;
 
   // Call _start
   wasmtime_val_t results;
@@ -429,7 +444,7 @@ int main()
   if (error != NULL || trap != NULL)
     exit_with_error("failed to call function", error, trap);
 
-  print_memory(0, 40, 4);
+  // print_memory(0, 40, 4);
 
   // print_registers();
 

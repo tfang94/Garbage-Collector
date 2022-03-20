@@ -16,7 +16,7 @@ clean:
 	- rm -f test.wasm wasm-gc
 
 test.wasm: example/test.c
-	$(CLANG) $< -o $@ -Wl,--allow-undefined -Wl,--export=__heap_base -O0
+	$(CLANG) $< -o $@ -Wl,--allow-undefined -Wl,--export=__heap_base -Wl,--export=__data_end -O0
 
 wasm-gc: src/wasm-gc.cpp
 	$(CXX) $< -I$(WASM_TIME_C_API)/include/ -L$(WASM_TIME_C_API)/lib -lwasmtime -o $@
