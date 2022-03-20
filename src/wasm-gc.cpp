@@ -247,11 +247,20 @@ int __allocate_memory(int bytes_requested)
     __collect_memory();
   }
 
+  bool BIG_bigenough = false;
+  free_list->free_chunks[BIG].remove_if([&BIG_bigenough,bytes_requested](Chunk* c) {
+          if (c->size >= bytes_requested) {
+              BIG_bigenough = true;
+              free_list->free_chunks[BIG].push_front(c);
+          }
+          return c->size >= bytes_requested;
+      });
+  
   Chunk *chunk;
 
-  // check free list
-  // TODO: make sure "big" memory from freelist is big enough
-  if (!free_list->free_chunks[memclass_index].empty())
+  // use freelist memory if free list is non empty (or, for BIG class, chunk is big enough)
+  if ((!free_list->free_chunks[memclass_index].empty() && memclass_index != BIG) ||
+      (memclass_index == BIG && BIG_bigenough == true))
   {
     chunk = free_list->free_chunks[memclass_index].front();
     free_list->free_chunks[memclass_index].pop_front();
