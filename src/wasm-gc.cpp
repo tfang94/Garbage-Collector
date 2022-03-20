@@ -145,8 +145,14 @@ size_t bytesAllocatedInSizeClass()
 
 // scan memory and mark accessable chunks
 
+// Initialize C and Wasm stack pointers.  Mark functions will use these to scan though data
+void *stack_ptr;
+void *base_ptr;
+int *wasm_stack_ptr;
+int *wasm_base_ptr;
+
 // std::unordered_map<int *, int> used_map; // TF: for debugging
-void __mark_C_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_set)
+void __mark_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_set)
 {
   for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(uint8_t *)) // Scan through C stack
   {
@@ -191,12 +197,14 @@ void __mark_C_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_se
 
 void __mark_memory()
 {
-  printf("stub\n");
   std::set<uint8_t *> used_set; // For efficient lookup of addresses when scanning memory
   for (Chunk *c : used_list)
   {
     used_set.insert(c->address);
   }
+  __mark_stack(stack_ptr, base_ptr, used_set);           // Mark C stack
+  __mark_stack(wasm_stack_ptr, wasm_base_ptr, used_set); // Mark Wasm stack
+  // TODO: scan registers and global exports
 }
 
 // collect unmarked memory and move it to the appropriate free list (aka sweep)
@@ -276,20 +284,20 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
                   const wasmtime_val_t *args, size_t nargs,
                   wasmtime_val_t *results, size_t nresults)
 {
-  void *stack_ptr;
-  void *base_ptr;
   asm("movq %%rsp, %0"
       : "=r"(stack_ptr));
   asm("movq %%rbp, %0"
       : "=r"(base_ptr));
-  int *wasm_stack_ptr = (int *)args[2].of.i32;
-  int *wasm_base_ptr = (int *)args[1].of.i32;
+  wasm_stack_ptr = (int *)args[2].of.i32;
+  wasm_base_ptr = (int *)args[1].of.i32;
 
   // print_C_stack(stack_ptr, base_ptr, 1, false);
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
+  // printf("wasm stack ptr: %p\n", wasm_stack_ptr);
+  // printf("wasm base pointer: %p\n", wasm_base_ptr);
   return NULL;
 
   // // TF: for debugging
@@ -405,6 +413,11 @@ int main()
     wasmtime_global_t global = item.of.global;
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
+    std::cout << exportname->data << "\n";
+    printf("export as int: %d\n", exportWasm);
+    printf("export as addr: %p\n", exportWasm);
+    printf("export as dereferrenced ptr: %d\n", *(int *)exportWasm);
+    printf("global value: %d\n", globalval.of.i32);
   }
 
   // what is this for?
