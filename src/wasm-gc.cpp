@@ -210,14 +210,13 @@ void __mark_memory()
 // collect unmarked memory and move it to the appropriate free list (aka sweep)
 void __collect_memory()
 {
-  used_list.remove_if([](Chunk *c)
-                      {
+  used_list.remove_if([](Chunk *c) {
             bool flag=c->mark;
             c->mark=false;
             if (flag==false) {
                 free_list->free_chunks[c->memclass_index].push_front(c);
             }
-            return flag==false; });
+            return flag==false;});
 }
 
 int __allocate_memory(int bytes_requested)
