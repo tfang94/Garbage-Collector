@@ -14,7 +14,6 @@ int main()
     int b = 63;
     int c = 65;
     int d = 67;
-    int *x;
     int *p = __malloc(sizeof(int), heap_base, data_end);
     *p = 17;
     int *p1 = __malloc(sizeof(int), heap_base, data_end);

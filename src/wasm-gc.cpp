@@ -135,7 +135,7 @@ void __mark_stack(void *stack_ptr, void *base_ptr, std::set<int> used_set)
     // printf("%d. addr: %p -> %p\n", i, stack_ptr + i, *(int *)(stack_ptr + i));
     try
     {
-      // If what appears to be pointer to used_list found on C stack, mark that chunk
+      // If what appears to be pointer to used_list found on stack, mark that chunk
       if (used_set.count(*(int *)(stack_ptr + i)) > 0)
       {
         for (Chunk *c : used_list)
@@ -223,7 +223,7 @@ void __mark_registers(std::set<int> used_set)
   {
     try
     {
-      // If what appears to be pointer to used_list found on C stack, mark that chunk
+      // If what appears to be pointer to used_list found, mark that chunk
       if (used_set.count(*(uint32_t *)reg) > 0)
       {
         for (Chunk *c : used_list)
@@ -251,6 +251,7 @@ void __mark_exports(std::set<int> used_set)
   {
     try
     {
+      // If what appears to be pointer to used_list found, mark that chunk
       if (used_set.count(elt) > 0)
       {
         for (Chunk *c : used_list)
