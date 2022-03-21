@@ -541,7 +541,7 @@ int main()
       std::cout << e.what();
     }
   }
-  // printf("WASM_GC_THRESH: %f\n", WASM_GC_THRESH);
+  printf("WASM_GC_THRESH: %.2f\n\n", WASM_GC_THRESH);
 
   // Call _start
   wasmtime_val_t results;
