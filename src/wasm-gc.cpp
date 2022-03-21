@@ -300,8 +300,9 @@ void __collect_memory()
             c->mark=false;
             if (flag==false) {
                 free_list->free_chunks[c->memclass_index].push_front(c);
+                printf("Object at offset %d collected\n", c->offset);
             }
-            return flag==false; });
+            return flag == false; });
 }
 
 int __allocate_memory(int bytes_requested)
@@ -393,7 +394,11 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
+
+  // // For testing
   // __mark_memory();
+  // __collect_memory();
+  // printf("-------------------------------------------\n");
   return NULL;
 }
 
@@ -495,6 +500,7 @@ int main()
   wasmtime_instancetype_t *instancety = wasmtime_instance_type(context, &instance);
   wasmtime_instancetype_exports(instancety, &exports);
 
+  printf("--processing exports--\n");
   for (int i = 0; i < exports.size; i++)
   {
     wasm_exporttype_t *exportWasm = exports.data[i];
@@ -508,20 +514,19 @@ int main()
     wasmtime_global_t global = item.of.global;
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
-    std::cout << "exportname: " << exportname->data << "\n";
+    printf("export name=%s, value=%ld\n", exportname->data, globalval.of.i64);
     export_list.push_back(globalval.of.i64);
 
     if (strcmp(exportname->data, "__heap_base") == 0) // global variable pointing to start of heap; also marking wasm stack base
     {
       __heap_base = globalval.of.i64;
-      printf("heapbase: %ld\n", __heap_base);
     }
     if (strcmp(exportname->data, "__data_end") == 0) // global variable pointing to bound for wasm stack top
     {
       __data_end = globalval.of.i64;
-      printf("data_end: %ld\n", __data_end);
     }
   }
+  printf("\n");
 
   // WASM_GC_THRESH is environment variable.  If not found we set to 0.8
   char *wasm_gc_thresh_str = getenv("WASM_GC_THRESH");
