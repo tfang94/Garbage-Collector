@@ -133,7 +133,6 @@ void __mark_stack(void *stack_ptr, void *base_ptr, std::set<int> used_set)
 {
   for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(int)) // Scan through C stack
   {
-    // printf("%d. addr: %p -> %p\n", i, stack_ptr + i, *(int *)(stack_ptr + i));
     try
     {
       // If what appears to be pointer to used_list found on stack, mark that chunk
@@ -166,7 +165,6 @@ void __mark_registers(std::set<int> used_set)
   void *rcx_ptr;
   void *rdx_ptr;
   void *rbx_ptr;
-  // void *r6_ptr; // Doesn't exist
   void *r8_ptr;
   void *r9_ptr;
   void *r10_ptr;
@@ -189,8 +187,6 @@ void __mark_registers(std::set<int> used_set)
       : "=r"(rdx_ptr));
   asm("movq %%rbx, %0"
       : "=r"(rbx_ptr));
-  // asm("movq %%r6, %0"
-  //     : "=r"(r6_ptr));
   asm("movq %%r8, %0"
       : "=r"(r8_ptr));
   asm("movq %%r9, %0"
@@ -281,10 +277,7 @@ void __mark_memory()
   for (Chunk *c : used_list)
   {
     used_set.insert(c->offset);
-    // printf("address = %p, offset = %d, val = %d\n", c->address, c->offset, *(int *)(c->address));
   }
-
-  // printf("Scanning roots\n");
   __mark_stack(stack_ptr, base_ptr, used_set);           // C Stack
   __mark_stack(wasm_stack_ptr, wasm_base_ptr, used_set); // wasm stack
   __mark_registers(used_set);                            // registers
@@ -484,13 +477,14 @@ int main()
   assert(ok && item.kind == WASMTIME_EXTERN_MEMORY);
   memory = item.of.memory;
 
+  // Grow memory to 1GB
   size_t memory_size = wasmtime_memory_size(context, &memory);
   wasm_memorytype_t *memty;
   memty = wasmtime_memory_type(context, &memory);
   size_t max;
   wasmtime_memorytype_maximum(memty, &max);
   size_t prev_size;
-  error = wasmtime_memory_grow(context, &memory, 16384 - memory_size, &prev_size); // Grow memory to 1GB
+  error = wasmtime_memory_grow(context, &memory, 16384 - memory_size, &prev_size);
   if (error != NULL)
     exit_with_error("failed to instantiate module", error, NULL);
   memory_size = wasmtime_memory_size(context, &memory);
@@ -548,40 +542,6 @@ int main()
   error = wasmtime_func_call(context, &run.of.func, NULL, 0, NULL, 0, &trap);
   if (error != NULL || trap != NULL)
     exit_with_error("failed to call function", error, trap);
-
-  // print_memory(0, 40, 4);
-
-  // print_memory(-40, 40, 4);
-
-  // If you want to grow and read memory you can use below functions
-  //  returns memory size in wasm pages
-  //  size_t memory_size = wasmtime_memory_size(context, &memory);
-  //  printf("%lu",memory_size);
-
-  // returns memory size in bytes (returns inconsistent numbers when called from here. okay inside malloc callback)
-  // size_t data_size = wasmtime_memory_data_size(context, &memory);
-  // printf("data size: %lu",data_size);
-
-  // wasm_memorytype_t* memty;
-  // memty = wasmtime_memory_type(context, &memory);
-  // size_t max;
-  // wasmtime_memorytype_maximum(memty, &max);
-  // size_t prev_size;
-  // error = wasmtime_memory_grow(context, &memory, max - memory_size, &prev_size);
-  // if (error != NULL)
-  //   exit_with_error("failed to instantiate module", error, NULL);
-  // MJ: guess: this part is to show you the memory grew?
-  // memory_size = wasmtime_memory_size(context, &memory);
-  // data_size = wasmtime_memory_data_size(context, &memory);
-
-  // read memory in integers (copied into "print memory")
-  //  for (int i = 0; i < 40; i+=4) {
-  //      uint32_t j = (wasmtime_memory_data(context, &memory)[i]) |
-  //          (wasmtime_memory_data(context, &memory)[i+1] << 8) |
-  //          (wasmtime_memory_data(context, &memory)[i+2] << 16) |
-  //          ((wasmtime_memory_data(context, &memory)[i+3]) << 24);
-  //      printf("%d\n", j);
-  //   }
 
   //-- end --
   // make sure you do this last!
