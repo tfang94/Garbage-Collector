@@ -14,10 +14,11 @@ static void exit_with_error(const char *message,
 
 wasmtime_memory_t memory;
 wasmtime_context_t *context;
+long __heap_base;             // exported globals pointing to bounds of wasm stack
+long __data_end;              // exported globals pointing to bounds of wasm stack
 int memory_bumper_offset = 0; // integer offset for end of allocated memory
-int heap_offset = 0; //start of heap (init in first __malloc call for both of these )
-long __heap_base;
-long __data_end;
+int heap_offset = 0;          // start of heap (init in first __malloc call for both of these )
+std::list<long> export_list;  // List of all exports
 
 struct Chunk
 {
@@ -68,15 +69,95 @@ void print_stack(void *stack_ptr, void *base_ptr, int interval, bool as_address)
 void print_memory(int start, int end, int step)
 {
   printf("wasm memory (GC):\n");
-  uint8_t *mem = wasmtime_memory_data(context, &memory)+heap_offset;
+  uint8_t *mem = wasmtime_memory_data(context, &memory) + heap_offset;
   for (int i = start; i < end; i += step)
   {
     uint32_t data = (mem[i] | (mem[i + 1]) << 8 | (mem[i + 2]) << 16 | (mem[i + 3]) << 24);
-    printf("%p -> %d\n", mem+i, data);
+    printf("%p -> %d\n", mem + i, data);
   }
 }
 
-void print_registers()
+// return size of wasm memory
+size_t wasmMemorySize()
+{
+  return (size_t)wasmtime_memory_data_size(context, &memory);
+}
+// return number of bytes allocated in size class
+size_t bytesAllocatedInSizeClass(int szClass)
+{
+  int classes[11] = {4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+  int mc = -1;
+  if (szClass > 4096)
+    mc = BIG;
+  for (int i = 10; i-- > 0;)
+  {
+    if (szClass == classes[i])
+    {
+      mc = i;
+      break;
+    }
+  }
+  if (mc == -1)
+    return 0;
+  int count = 0;
+  for (Chunk *c : used_list)
+  {
+    if (c->memclass_index == mc)
+      count += c->size;
+  }
+  return count;
+}
+
+// return number of bytes allocaed in the wasm memory
+size_t getBytesAllocated()
+{
+  int classes[12] = {4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 4097};
+  int count = 0;
+  for (int i : classes)
+    count += bytesAllocatedInSizeClass(i);
+  return count;
+}
+
+/*--GC functions--*/
+
+// scan memory and mark accessable chunks
+
+// Initialize C and Wasm stack pointers.  Mark functions will use these to scan though data
+void *stack_ptr;
+void *base_ptr;
+void *wasm_stack_ptr;
+void *wasm_base_ptr;
+
+void __mark_stack(void *stack_ptr, void *base_ptr, std::set<int> used_set)
+{
+  for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(int)) // Scan through C stack
+  {
+    // printf("%d. addr: %p -> %p\n", i, stack_ptr + i, *(int *)(stack_ptr + i));
+    try
+    {
+      // If what appears to be pointer to used_list found on C stack, mark that chunk
+      if (used_set.count(*(int *)(stack_ptr + i)) > 0)
+      {
+        for (Chunk *c : used_list)
+        {
+          if (c->offset == *(int *)(stack_ptr + i))
+          {
+            if (!c->mark)
+              printf("Object at offset %d marked\n", c->offset);
+            c->mark = true;
+            break;
+          }
+        }
+      }
+    }
+    catch (const std::exception &e)
+    {
+      std::cout << e.what() << "\n";
+    }
+  }
+}
+
+void __mark_registers(std::set<int> used_set)
 {
   void *rsp_ptr;
   void *rbp_ptr;
@@ -84,9 +165,13 @@ void print_registers()
   void *rcx_ptr;
   void *rdx_ptr;
   void *rbx_ptr;
-  // void *r6_ptr; //Doesn't exist
+  // void *r6_ptr; // Doesn't exist
   void *r8_ptr;
   void *r9_ptr;
+  void *r10_ptr;
+  void *r11_ptr;
+  void *r12_ptr;
+  void *r13_ptr;
   void *r14_ptr;
   void *r15_ptr;
 
@@ -109,86 +194,45 @@ void print_registers()
       : "=r"(r8_ptr));
   asm("movq %%r9, %0"
       : "=r"(r9_ptr));
+  asm("movq %%r10, %0"
+      : "=r"(r10_ptr));
+  asm("movq %%r11, %0"
+      : "=r"(r11_ptr));
+  asm("movq %%r12, %0"
+      : "=r"(r12_ptr));
+  asm("movq %%r13, %0"
+      : "=r"(r13_ptr));
   asm("movq %%r14, %0"
       : "=r"(r14_ptr));
   asm("movq %%r15, %0"
       : "=r"(r15_ptr));
 
-  printf("rsp: %p -> %d\n", rsp_ptr, *(uint8_t *)rsp_ptr);
-  printf("rbp: %p -> %d\n", rbp_ptr, *(uint8_t *)rsp_ptr);
-  printf("rax: %p -> %d\n", rbp_ptr, *(uint8_t *)rax_ptr);
-  // printf("rcx: %p -> %d\n", rcx_ptr, *(uint8_t *)rcx_ptr); // Seg fault
-  // printf("rdx: %p -> %d\n", rdx_ptr, *(uint8_t *)rdx_ptr); // Seg fault
-  printf("rbx: %p -> %d\n", rbx_ptr, *(uint8_t *)rbx_ptr);
-  // printf("r6: %p -> %d\n", r6_ptr, *(uint8_t *)r6_ptr);
-  // printf("r8: %p -> %d\n", r8_ptr, *(uint8_t *)r8_ptr); //Seg fault
-  // printf("r9: %p -> %d\n", r9_ptr, *(uint8_t *)r9_ptr);
-  // printf("r14: %p -> %d\n", r14_ptr, *(uint8_t *)r14_ptr);
-  // printf("r15: %p -> %d\n", r15_ptr, *(uint8_t *)r15_ptr); //Seg fault
-}
-
-// return size of wasm memory
-size_t wasmMemorySize()
-{
-    return (size_t)memory_bumper_offset - 66576;
-}
-// return number of bytes allocated in size class
-size_t bytesAllocatedInSizeClass(int szClass)
-{
-    int classes[11] = {4,8,16,32,64,128,256,512,1024,2048,4096};
-    int mc = -1;
-    if (szClass > 4096)
-        mc = BIG;
-    for(int i = 10;i-->0;){
-        if (szClass == classes[i]){
-            mc = i;
-            break;
-        }
+  uint8_t *memstart = wasmtime_memory_data(context, &memory);
+  std::list<void *> register_list({rsp_ptr, rbp_ptr, rax_ptr, rcx_ptr,
+                                   rdx_ptr, rbx_ptr, r8_ptr, r9_ptr, r10_ptr, r11_ptr, r12_ptr, r13_ptr, r14_ptr, r15_ptr});
+  std::list<void *> accessible_reg_list;
+  // Only access registers with valid addresses to avoid segmentation fault
+  for (void *reg : register_list)
+  {
+    if ((long)reg >= (long)memstart)
+    {
+      accessible_reg_list.push_back(reg);
     }
-    if (mc == -1) return 0;
-    int count = 0;
-    for (Chunk* c : used_list){
-        if (c->memclass_index == mc)
-            count += c->size;
-    }
-    return count;
-}
-
-// return number of bytes allocaed in the wasm memory
-size_t getBytesAllocated()
-{
-    int classes[12] = {4,8,16,32,64,128,256,512,1024,2048,4096,4097};
-    int count = 0;
-    for (int i : classes)
-        count += bytesAllocatedInSizeClass(i);
-    return count;
-}
-
-/*--GC functions--*/
-
-// scan memory and mark accessable chunks
-
-// Initialize C and Wasm stack pointers.  Mark functions will use these to scan though data
-void *stack_ptr;
-void *base_ptr;
-int *wasm_stack_ptr;
-int *wasm_base_ptr;
-
-// std::unordered_map<int *, int> used_map; // TF: for debugging
-void __mark_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_set)
-{
-  for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(uint8_t *)) // Scan through C stack
+  }
+  for (void *reg : accessible_reg_list)
   {
     try
     {
       // If what appears to be pointer to used_list found on C stack, mark that chunk
-      if (used_set.count(*(uint8_t **)(stack_ptr + i)) > 0)
+      if (used_set.count(*(uint32_t *)reg) > 0)
       {
         for (Chunk *c : used_list)
         {
-          if (c->address == *(uint8_t **)(stack_ptr + i))
+          if (c->offset == *(uint32_t *)reg)
           {
-            c->mark = 1;
+            if (!c->mark)
+              printf("Object at offset %d marked\n", c->offset);
+            c->mark = true;
             break;
           }
         }
@@ -199,47 +243,63 @@ void __mark_stack(void *stack_ptr, void *base_ptr, std::set<uint8_t *> used_set)
       std::cout << e.what() << "\n";
     }
   }
-  // for debugging purposes: finds pointers to ints put on stack in __malloc_callback()
-  // printf("Scanning C stack:\n");
-  // for (int i = 0; stack_ptr + i <= base_ptr; i += sizeof(void *))
-  // {
-  //   printf("address: %p -> %p\n", (stack_ptr + i), *(int **)(stack_ptr + i));
-  //   try
-  //   {
-  //     if (used_map.count(*(int **)(stack_ptr + i)) > 0)
-  //     {
-  //       printf("matched int : %d\n", used_map.at(*(int **)(stack_ptr + i)));
-  //     }
-  //   }
-  //   catch (const std::exception &e)
-  //   {
-  //     std::cout << e.what() << "\n";
-  //   }
-  // }
+}
+
+void __mark_exports(std::set<int> used_set)
+{
+  for (long elt : export_list)
+  {
+    try
+    {
+      if (used_set.count(elt) > 0)
+      {
+        for (Chunk *c : used_list)
+        {
+          if (c->offset == elt)
+          {
+            if (!c->mark)
+              printf("Object at offset %d marked\n", c->offset);
+            c->mark = true;
+            break;
+          }
+        }
+      }
+    }
+    catch (const std::exception &e)
+    {
+      std::cout << e.what() << "\n";
+    }
+  }
 }
 
 void __mark_memory()
 {
-  std::set<uint8_t *> used_set; // For efficient lookup of addresses when scanning memory
+  std::set<int> used_set; // For efficient lookup of addresses when scanning memory
+  uint8_t *memstart = wasmtime_memory_data(context, &memory);
   for (Chunk *c : used_list)
   {
-    used_set.insert(c->address);
+    used_set.insert(c->offset);
+    // printf("address = %p, offset = %d, val = %d\n", c->address, c->offset, *(int *)(c->address));
   }
-  __mark_stack(stack_ptr, base_ptr, used_set);           // Mark C stack
-  __mark_stack(wasm_stack_ptr, wasm_base_ptr, used_set); // Mark Wasm stack
-  // TODO: scan registers and global exports
+
+  // printf("Scanning roots\n");
+  __mark_stack(stack_ptr, base_ptr, used_set);           // C Stack
+  __mark_stack(wasm_stack_ptr, wasm_base_ptr, used_set); // wasm stack
+  __mark_registers(used_set);                            // registers
+  __mark_exports(used_set);                              // exports
 }
 
 // collect unmarked memory and move it to the appropriate free list (aka sweep)
 void __collect_memory()
 {
-  used_list.remove_if([](Chunk *c) {
+  used_list.remove_if([](Chunk *c)
+                      {
             bool flag=c->mark;
             c->mark=false;
             if (flag==false) {
                 free_list->free_chunks[c->memclass_index].push_front(c);
             }
-            return flag==false;});
+            return flag==false; });
 }
 
 int __allocate_memory(int bytes_requested)
@@ -271,14 +331,14 @@ int __allocate_memory(int bytes_requested)
   }
 
   bool BIG_bigenough = false;
-  free_list->free_chunks[BIG].remove_if([&BIG_bigenough,bytes_requested](Chunk* c) {
+  free_list->free_chunks[BIG].remove_if([&BIG_bigenough, bytes_requested](Chunk *c)
+                                        {
           if (c->size >= bytes_requested) {
               BIG_bigenough = true;
               free_list->free_chunks[BIG].push_front(c);
           }
-          return c->size >= bytes_requested;
-      });
-  
+          return c->size >= bytes_requested; });
+
   Chunk *chunk;
 
   // use freelist memory if free list is non empty (or, for BIG class, chunk is big enough)
@@ -319,42 +379,19 @@ __malloc_callback(void *env, wasmtime_caller_t *caller,
       : "=r"(stack_ptr));
   asm("movq %%rbp, %0"
       : "=r"(base_ptr));
-  wasm_stack_ptr = (int*)args[2].of.i32;
-  wasm_base_ptr = (int*)args[1].of.i32;
-  //init offset
-  if (heap_offset == 0) heap_offset += 66576; //stack/heap base
-  if (memory_bumper_offset == 0) memory_bumper_offset += heap_offset;
+  uint8_t *memstart = wasmtime_memory_data(context, &memory);
+  wasm_stack_ptr = memstart + (long)args[2].of.i32;
+  wasm_base_ptr = memstart + (long)args[1].of.i32;
+  // init offset
+  if (heap_offset == 0)
+    heap_offset += __heap_base; // stack/heap base
+  if (memory_bumper_offset == 0)
+    memory_bumper_offset += heap_offset;
   int bytes_requested = args->of.i32;
   int offset = __allocate_memory(bytes_requested);
   results->kind = WASMTIME_I32;
   results->of.i32 = offset; // return alloc pointer as int
-
-
-  //for (int i = 0;i<=10;i++){
-  //    printf("%p -> %d\n", wasmstackbase, *wasmstackbase);
-  //}
-  
-  // // TF: for debugging (scanning memory offset with __heap_base)
-  // long stack_sz = (long)wasm_base_ptr - (long)wasm_stack_ptr;
-  // printf("stack size: %ld\n", stack_sz);
-  // uint8_t *memstart = wasmtime_memory_data(context, &memory);
-  // uint8_t *mem_heap_base = (memstart + __heap_base - stack_sz);
-  // for (int i = 0; i < stack_sz; i++)
-  // {
-  //   printf("addr: %p -> %d\n", mem_heap_base + i, *(mem_heap_base + i));
-  // }
-
-  // // TF: for debugging (for testing and printing C stack)
-  // int a = 27;
-  // int b = 29;
-  // int c = 31;
-  // int *a_ptr = &a;
-  // int *b_ptr = &b;
-  // int *c_ptr = &c;
-  // used_map[a_ptr] = a;
-  // used_map[b_ptr] = b;
-  // used_map[c_ptr] = c;
-  // __mark_C_stack(stack_ptr, base_ptr);
+  // __mark_memory();
   return NULL;
 }
 
@@ -440,6 +477,17 @@ int main()
   assert(ok && item.kind == WASMTIME_EXTERN_MEMORY);
   memory = item.of.memory;
 
+  size_t memory_size = wasmtime_memory_size(context, &memory);
+  wasm_memorytype_t *memty;
+  memty = wasmtime_memory_type(context, &memory);
+  size_t max;
+  wasmtime_memorytype_maximum(memty, &max);
+  size_t prev_size;
+  error = wasmtime_memory_grow(context, &memory, 16384 - memory_size, &prev_size); // Grow memory to 1GB
+  if (error != NULL)
+    exit_with_error("failed to instantiate module", error, NULL);
+  memory_size = wasmtime_memory_size(context, &memory);
+
   // Get all other exports
   wasm_exporttype_vec_t exports;
   wasmtime_instancetype_t *instancety = wasmtime_instance_type(context, &instance);
@@ -459,16 +507,17 @@ int main()
     wasmtime_val_t globalval;
     wasmtime_global_get(context, &global, &globalval);
     std::cout << "exportname: " << exportname->data << "\n";
+    export_list.push_back(globalval.of.i64);
 
-    if (strcmp(exportname->data, "__heap_base") == 0)
+    if (strcmp(exportname->data, "__heap_base") == 0) // global variable pointing to start of heap; also marking wasm stack base
     {
       __heap_base = globalval.of.i64;
       printf("heapbase: %ld\n", __heap_base);
     }
-    if (strcmp(exportname->data, "__data_end") == 0)
+    if (strcmp(exportname->data, "__data_end") == 0) // global variable pointing to bound for wasm stack top
     {
       __data_end = globalval.of.i64;
-      printf("__data_end: %ld\n", __data_end);
+      printf("data_end: %ld\n", __data_end);
     }
   }
   // what is this for?
@@ -483,7 +532,7 @@ int main()
 
   // print_memory(0, 40, 4);
 
-  print_memory(-40, 40, 4);
+  // print_memory(-40, 40, 4);
   // print_registers();
 
   // If you want to grow and read memory you can use below functions

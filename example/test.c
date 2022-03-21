@@ -3,44 +3,33 @@
 
 void *__malloc(size_t sz, void *wasm_stack_base, void *wasm_stack_top);
 
-// void *stack_base;
-// void *stack_top;
 extern unsigned int __heap_base;
 extern unsigned int __data_end;
-int *array;
-int *array2;
 
 int main()
 {
-    int s = 33;
-    int r = 22;
-    int q = 11;
-    int w = 99;
-    int z = 420;
-    int y = 69;
-    int x = 42;
-    int a = 27;
-    void *stack_base;
-    stack_base = &a;
-    int b = 52;
-    void *stack_top;
-
-    stack_top = &b;
-    array = (int *)__malloc(3 * sizeof(int), &stack_base, &stack_top);
-    *array = 111;
-
-    array2 = (int *)__malloc(2 * sizeof(int), &stack_base, &stack_top);
-    *array2 = 222;
-
-    // printf("wasm memory (user): \n");
-    // for (int i = 0; i < 10; i++)
-    //     printf("array:%p %d\n", array + i, array[i]);
-
-    int *x1 = (int *)&__heap_base;
-    int *x2 = (int *)&__data_end;
-    // printf("Cfile __heap_base: %p\n", x1);
-    // printf("C file __data_end: %p\n", x2);
-    // printf("hello\n");
+    void *heap_base = (void *)&__heap_base;
+    void *data_end = (void *)&__data_end;
+    int a = 61;
+    int b = 63;
+    int c = 65;
+    int d = 67;
+    int *x;
+    int *p = __malloc(sizeof(int), heap_base, data_end);
+    *p = 17;
+    int *p1 = __malloc(sizeof(int), heap_base, data_end);
+    *p1 = 19;
+    int *p2 = __malloc(sizeof(int), heap_base, data_end);
+    *p2 = 21;
+    int *p3 = __malloc(sizeof(int), heap_base, data_end);
+    *p3 = 23;
+    int *p4 = __malloc(sizeof(int), heap_base, data_end);
+    *p4 = 25;
+    // printf("p: %d\n", p);
+    // printf("p1: %d\n", p1);
+    // printf("p2: %d\n", p2);
+    // printf("p3: %d\n", p3);
+    // printf("p4: %d\n", p4);
 
     return 0;
 }
