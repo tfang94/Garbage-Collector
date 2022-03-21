@@ -318,7 +318,7 @@ int __allocate_memory(int bytes_requested)
   // check for remaining memory
   size_t memory_length = wasmtime_memory_data_size(context, &memory);
   int memory_remaining = memory_length - offset;
-  bool oom_flag = (getBytesAllocated() <= WASM_GC_THRESH * wasmMemorySize()) ? false : true;
+  bool oom_flag = (getBytesAllocated() + memsize <= WASM_GC_THRESH * wasmMemorySize()) ? false : true;
 
   if (oom_flag == true)
   {
