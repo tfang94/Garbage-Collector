@@ -6,8 +6,8 @@
 // cpp
 #include <iostream>
 #include <list>
-#include <unordered_map>
 #include <set>
+#include <cstdlib>
 
 static void exit_with_error(const char *message,
                             wasmtime_error_t *error, wasm_trap_t *trap);
@@ -19,6 +19,7 @@ long __data_end;              // exported globals pointing to bounds of wasm sta
 int memory_bumper_offset = 0; // integer offset for end of allocated memory
 int heap_offset = 0;          // start of heap (init in first __malloc call for both of these )
 std::list<long> export_list;  // List of all exports
+double WASM_GC_THRESH = 0.8;  // Environmental variable inititialized in main(). If not found set default=0.8
 
 struct Chunk
 {
@@ -323,7 +324,7 @@ int __allocate_memory(int bytes_requested)
   // check for remaining memory
   size_t memory_length = wasmtime_memory_data_size(context, &memory);
   int memory_remaining = memory_length - offset;
-  bool oom_flag = (memory_remaining >= memsize) ? false : true;
+  bool oom_flag = (getBytesAllocated() <= WASM_GC_THRESH * wasmMemorySize()) ? false : true;
 
   if (oom_flag == true)
   {
@@ -521,9 +522,21 @@ int main()
       printf("data_end: %ld\n", __data_end);
     }
   }
-  // what is this for?
-  // printf("144: %p\n", wasmtime_memory_data(context, &memory));
-  // uint8_t *hp_bs = (uint8_t *)70288;
+
+  // WASM_GC_THRESH is environment variable.  If not found we set to 0.8
+  char *wasm_gc_thresh_str = getenv("WASM_GC_THRESH");
+  if (wasm_gc_thresh_str != nullptr)
+  {
+    try
+    {
+      WASM_GC_THRESH = std::atof(wasm_gc_thresh_str);
+    }
+    catch (const std::exception &e)
+    {
+      std::cout << e.what();
+    }
+  }
+  // printf("WASM_GC_THRESH: %f\n", WASM_GC_THRESH);
 
   // Call _start
   wasmtime_val_t results;
@@ -534,7 +547,6 @@ int main()
   // print_memory(0, 40, 4);
 
   // print_memory(-40, 40, 4);
-  // print_registers();
 
   // If you want to grow and read memory you can use below functions
   //  returns memory size in wasm pages
