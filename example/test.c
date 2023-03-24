@@ -13,7 +13,7 @@ void generate_garbage(int rep)
     for (int i = 0; i < rep; i++)
     {
         garb = __malloc(2 * (i + 1) * sizeof(int), (void *)&__heap_base, (void *)&__data_end);
-        // printf("garb instance %d offset: %ld\n", i + 1, (long)garb); // for testing
+        printf("garb instance %d offset: %ld\n", i + 1, (long)garb); // for testing
     }
 }
 
@@ -25,6 +25,7 @@ int main()
     int b = 63;
     int c = 65;
     int d = 67;
+    int e = 69;
     int *p = __malloc(sizeof(int), heap_base, data_end); // put some pointers on wasm stack to test mark function
     int *p1 = __malloc(2 * sizeof(int), heap_base, data_end);
     int *p2 = __malloc(5 * sizeof(int), heap_base, data_end);
