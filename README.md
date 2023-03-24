@@ -15,9 +15,7 @@ https://people.mpi-sws.org/~rossberg/papers/Haas,%20Rossberg,%20Schuff,%20Titzer
 To build the project, follow the instructions below. Note: our garbage collector uses the global exports __heap_base and __data_end, so it's important that these stay exported (defined in Makefile).
 
 Work Breakdown:
-
 Thomas: scanning roots and mark function, handle environment and exported variables, documentation, testing
-
 Matt: allocation and sweeping, high level planning, lead documentation and workflow organization, testing
 
 ## Instructions
