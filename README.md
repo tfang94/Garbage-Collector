@@ -17,6 +17,7 @@ To build the project, follow the instructions below. Note: our garbage collector
 Work Breakdown:
 
 Thomas: scanning roots and mark function, handle environment and exported variables, documentation, testing
+
 Matt: allocation and sweeping, high level planning, lead documentation and workflow organization, testing
 
 ## Instructions
